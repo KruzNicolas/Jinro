@@ -16,6 +16,7 @@ class ShortenerLink(SQLModel, table=True):
     is_active: bool = Field(default=True, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_at: datetime | None = Field(default=None, nullable=True)
     clicks: int = Field(default=0, nullable=False)
 
 # SCHEMAS (Pydantic)
@@ -34,6 +35,7 @@ class ShortenerRead(BaseModel):
     user_id: uuid.UUID | None = None
     is_active: bool
     created_at: datetime
+    deleted_at: datetime | None = None
     clicks: int
 
     class Config:

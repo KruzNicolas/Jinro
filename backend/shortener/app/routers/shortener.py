@@ -4,6 +4,7 @@ import string
 import random
 import uuid
 import re
+from datetime import datetime, timezone
 
 # External imports
 from fastapi import APIRouter, HTTPException, status, Depends
@@ -15,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from models import ShortenerCreate, ShortenerRead, ShortenerLink
 from db import SessionDep
 
-
+MAX_ATTEMPTS = 5
 router = APIRouter()
 
 # Generate a random short URL
@@ -26,9 +27,25 @@ def generate_short_url(length: int = 6) -> str:
     return ''.join(random.choice(chars) for _ in range(length))
 
 
+def normalize_original_url(url: str) -> str:
+    pattern = r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(pattern, url):
+        raise HTTPException(
+            status_code=400,
+            detail="Original URL inválido. Debe ser un dominio como 'example.com'."
+        )
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    return url
+
+
 def create_shortener_link(session, original_url: str, short_url: str, user_id: uuid.UUID | None = None) -> ShortenerLink:
+
+    normalized_url = normalize_original_url(original_url)
     new_link = ShortenerLink(
-        original_url=original_url,
+        original_url=normalized_url,
         short_url=short_url,
         user_id=user_id or None
     )
@@ -38,8 +55,6 @@ def create_shortener_link(session, original_url: str, short_url: str, user_id: u
     session.refresh(new_link)
     return new_link
 
-
-MAX_ATTEMPTS = 5
 
 # Create a new short URL
 
@@ -54,6 +69,11 @@ def create_short_url(payload: ShortenerCreate, session: SessionDep):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Short URL not valid, only alphanumeric characters, hyphens, and underscores are allowed."
+            )
+        if len(short_url) < 3 or len(short_url) > 20:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Short URL must be between 3 and 20 characters long."
             )
 
         try:
@@ -117,6 +137,7 @@ def delete_short_url(short_url: str, session: SessionDep):
             detail="Short URL is already deactivated."
         )
 
+    link.deleted_at = datetime.now(timezone.utc)
     link.is_active = False
     session.add(link)
     session.commit()
