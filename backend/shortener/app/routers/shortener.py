@@ -1,4 +1,155 @@
 
-from fastapi import APIRouter
+# Standard library imports
+import string
+import random
+import uuid
+import re
+
+# External imports
+from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi.responses import RedirectResponse
+from sqlmodel import select
+from sqlalchemy.exc import IntegrityError
+
+# Self imports
+from models import ShortenerCreate, ShortenerRead, ShortenerLink
+from db import SessionDep
+
 
 router = APIRouter()
+
+# Generate a random short URL
+
+
+def generate_short_url(length: int = 6) -> str:
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
+
+
+def create_shortener_link(session, original_url: str, short_url: str, user_id: uuid.UUID | None = None) -> ShortenerLink:
+    new_link = ShortenerLink(
+        original_url=original_url,
+        short_url=short_url,
+        user_id=user_id or None
+    )
+
+    session.add(new_link)
+    session.commit()
+    session.refresh(new_link)
+    return new_link
+
+
+MAX_ATTEMPTS = 5
+
+# Create a new short URL
+
+
+@router.post("/shortener", response_model=ShortenerRead, status_code=status.HTTP_201_CREATED, tags=["shortener"])
+def create_short_url(payload: ShortenerCreate, session: SessionDep):
+
+    short_url = payload.short_url
+
+    if short_url:
+        if not re.match(r'^[a-zA-Z0-9_-]+$', short_url):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Short URL not valid, only alphanumeric characters, hyphens, and underscores are allowed."
+            )
+
+        try:
+            return create_shortener_link(session, payload.original_url, short_url, payload.user_id)
+
+        except IntegrityError as e:
+            session.rollback()
+
+            error_msg = str(e).lower()
+            if "unique" in error_msg or "duplicate" in error_msg or "violates unique constraint" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Short URL already exists. Please choose another one."
+                ) from e
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database integrity error occurred."
+                ) from e
+
+    else:
+        for _ in range(MAX_ATTEMPTS):
+            candidate = generate_short_url()
+
+            try:
+                return create_shortener_link(session, payload.original_url, candidate, payload.user_id)
+
+            except IntegrityError as e:
+                session.rollback()
+                error_msg = str(e).lower()
+                if not ("unique" in error_msg or "duplicate" in error_msg or "violates unique constraint" in error_msg):
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Database integrity error occurred."
+                    ) from e
+                continue
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Could not generate a unique short URL. Please try again."
+    )
+
+
+# Deactivate a short URL
+
+@router.delete("/shortener/{short_url}", status_code=status.HTTP_200_OK, tags=["shortener"])
+def delete_short_url(short_url: str, session: SessionDep):
+
+    link = session.exec(select(ShortenerLink).where(
+        ShortenerLink.short_url == short_url)).first()
+
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Short URL not found."
+        )
+
+    if not link.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Short URL is already deactivated."
+        )
+
+    link.is_active = False
+    session.add(link)
+    session.commit()
+    session.refresh(link)
+
+    return {"detail": "Short URL deactivated successfully."}
+
+# All link from a specific user
+
+
+@router.get("/shortener/user/{user_id}", response_model=list[ShortenerRead], tags=["shortener"])
+def get_user_links(user_id: uuid.UUID, session: SessionDep):
+    links = session.exec(select(ShortenerLink).where(
+        ShortenerLink.user_id == user_id)).all()
+    return links
+
+# Redirect to the original URL
+
+
+@router.get("/{short_url}", tags=["shortener"])
+def get_short_url(short_url: str, session: SessionDep):
+
+    link = session.exec(select(ShortenerLink).where(
+        ShortenerLink.short_url == short_url, ShortenerLink.is_active == True)).first()
+
+    if not link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Short URL not found or has been deleted."
+        )
+
+    link.clicks += 1
+    session.add(link)
+    session.commit()
+
+    return RedirectResponse(link.original_url)
