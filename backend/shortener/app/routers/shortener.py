@@ -41,7 +41,7 @@ def normalize_original_url(url: str) -> str:
     return url
 
 
-def create_shortener_link(session, original_url: str, short_url: str, user_id: uuid.UUID | None = None) -> ShortenerLink:
+def create_shortener_link(session: SessionDep, original_url: str, short_url: str, user_id: uuid.UUID | None = None) -> ShortenerLink:
 
     normalized_url = normalize_original_url(original_url)
     new_link = ShortenerLink(
