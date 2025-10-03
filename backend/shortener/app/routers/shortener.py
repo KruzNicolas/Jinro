@@ -41,25 +41,28 @@ def normalize_original_url(url: str) -> str:
     return url
 
 
-def create_shortener_link(session: SessionDep, original_url: str, short_url: str, user_id: uuid.UUID | None = None) -> ShortenerLink:
+def create_shortener_link(session: SessionDep, original_url: str, short_url: str) -> ShortenerLink:
 
-    normalized_url = normalize_original_url(original_url)
-    new_link = ShortenerLink(
-        original_url=normalized_url,
-        short_url=short_url,
-        user_id=user_id or None
-    )
+    try:
+        normalized_url = normalize_original_url(original_url)
+        new_link = ShortenerLink(
+            original_url=normalized_url,
+            short_url=short_url,
+        )
 
-    session.add(new_link)
-    session.commit()
-    session.refresh(new_link)
-    return new_link
+        session.add(new_link)
+        session.commit()
+        session.refresh(new_link)
+        return new_link
+    except Exception as e:
+        session.rollback()
+        raise
 
 
 # Create a new short URL
 
 
-@router.post("/shortener", response_model=ShortenerRead, status_code=status.HTTP_201_CREATED, tags=["shortener"])
+@router.post("/links", response_model=ShortenerRead, status_code=status.HTTP_201_CREATED, tags=["shortener"])
 def create_short_url(payload: ShortenerCreate, session: SessionDep):
 
     short_url = payload.short_url
@@ -77,7 +80,7 @@ def create_short_url(payload: ShortenerCreate, session: SessionDep):
             )
 
         try:
-            return create_shortener_link(session, payload.original_url, short_url, payload.user_id)
+            return create_shortener_link(session, payload.original_url, short_url)
 
         except IntegrityError as e:
             session.rollback()
@@ -99,7 +102,7 @@ def create_short_url(payload: ShortenerCreate, session: SessionDep):
             candidate = generate_short_url()
 
             try:
-                return create_shortener_link(session, payload.original_url, candidate, payload.user_id)
+                return create_shortener_link(session, payload.original_url, candidate)
 
             except IntegrityError as e:
                 session.rollback()
@@ -119,7 +122,7 @@ def create_short_url(payload: ShortenerCreate, session: SessionDep):
 
 # Deactivate a short URL
 
-@router.delete("/shortener/{short_url}", status_code=status.HTTP_200_OK, tags=["shortener"])
+@router.delete("/links/{short_url}", status_code=status.HTTP_200_OK, tags=["shortener"])
 def delete_short_url(short_url: str, session: SessionDep):
 
     link = session.exec(select(ShortenerLink).where(
@@ -148,10 +151,11 @@ def delete_short_url(short_url: str, session: SessionDep):
 # All link from a specific user
 
 
-@router.get("/shortener/user/{user_id}", response_model=list[ShortenerRead], tags=["shortener"])
-def get_user_links(user_id: uuid.UUID, session: SessionDep):
+@router.get("/links", response_model=list[ShortenerRead], tags=["shortener"])
+def get_all_links(session: SessionDep):
+
     links = session.exec(select(ShortenerLink).where(
-        ShortenerLink.user_id == user_id)).all()
+        ShortenerLink.is_active == True)).all()
     return links
 
 # Redirect to the original URL
@@ -168,9 +172,5 @@ def get_short_url(short_url: str, session: SessionDep):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Short URL not found or has been deleted."
         )
-
-    link.clicks += 1
-    session.add(link)
-    session.commit()
 
     return RedirectResponse(link.original_url)

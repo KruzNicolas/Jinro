@@ -12,7 +12,6 @@ class ShortenerLink(SQLModel, table=True):
                           primary_key=True)
     original_url: str = Field(nullable=False)
     short_url: str = Field(nullable=False, unique=True, index=True)
-    user_id: uuid.UUID | None = Field(nullable=True, index=True)
     is_active: bool = Field(default=True, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False)
@@ -25,18 +24,15 @@ class ShortenerLink(SQLModel, table=True):
 class ShortenerCreate(BaseModel):
     original_url: str
     short_url: str | None = None
-    user_id: uuid.UUID | None = None
 
 
 class ShortenerRead(BaseModel):
     id: uuid.UUID
     original_url: str
     short_url: str
-    user_id: uuid.UUID | None = None
     is_active: bool
     created_at: datetime
     deleted_at: datetime | None = None
-    clicks: int
 
     class Config:
         from_attributes = True
