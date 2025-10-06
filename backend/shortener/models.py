@@ -1,7 +1,7 @@
 
 from datetime import datetime, timezone
 from sqlmodel import SQLModel, Field
-from pydantic import BaseModel
+from pydantic import BaseModel, AnyHttpUrl
 import uuid
 
 # DB
@@ -16,13 +16,21 @@ class ShortenerLink(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), nullable=False)
     deleted_at: datetime | None = Field(default=None, nullable=True)
-    clicks: int = Field(default=0, nullable=False)
+
+
+class ApiKey(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    key_hash: str = Field(nullable=False, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime | None = Field(default=None)
 
 # SCHEMAS (Pydantic)
 
 
 class ShortenerCreate(BaseModel):
-    original_url: str
+    api_key: str
+    original_url: AnyHttpUrl
     short_url: str | None = None
 
 
