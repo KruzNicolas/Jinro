@@ -6,16 +6,14 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from models import ApiKey
 from sqlmodel import select
-from logging_config import logger
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from app.logging_config import logger
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from .rate_limit_config import limiter
 from db import create_all_tables, SessionLocal, engine
 from .routers import shortener
-from services.apikey_services import generate_api_key
-
-limiter = Limiter(key_func=get_remote_address, default_limits=["50/minute"])
+from app.services.apikey_services import generate_api_key
 
 
 @asynccontextmanager
@@ -33,10 +31,18 @@ app.add_exception_handler(
 
 async def key_rotation_scheduler():
     while True:
-        await asyncio.sleep(60 * 60 * 24)  # 24 hours
         with SessionLocal(engine) as session:
             key = session.exec(select(ApiKey).order_by(
                 ApiKey.created_at.desc())).first()  # type: ignore
-            if not key or not key.expires_at or key.expires_at < datetime.now(timezone.utc):
+            if not key or not key.expires_at:
                 logger.info("No valid API key found, generating a new one.")
                 generate_api_key(session)
+            else:
+                expires_at = key.expires_at
+                # Si está sin tz, se la fijamos
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if expires_at < datetime.now(timezone.utc):
+                    generate_api_key(session)
+
+        await asyncio.sleep(60 * 60 * 24)  # 24 hours

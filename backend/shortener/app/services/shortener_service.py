@@ -11,11 +11,11 @@ from fastapi import HTTPException, status, Request
 from fastapi.responses import RedirectResponse
 from sqlmodel import select
 from sqlalchemy.exc import IntegrityError
-from logging_config import logger
+from app.logging_config import logger
 
 # Self imports
-from services.apikey_services import validate_api_key
-from utils.url_utils import normalize_original_url, generate_short_url
+from app.services.apikey_services import validate_api_key
+from app.utils.url_utils import normalize_original_url, generate_short_url
 from models import ShortenerCreate, ShortenerLink
 from db import SessionDep
 

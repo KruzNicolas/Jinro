@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from db import SessionDep
 from sqlmodel import select
 from datetime import datetime, timezone, timedelta
-from logging_config import logger
+from app.logging_config import logger
 from models import ApiKey
 
 
@@ -34,8 +34,17 @@ def validate_api_key(session: SessionDep, api_key: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid API Key.")
-    if key.expires_at and key.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="API Key has expired.")
+
+    now = datetime.now(timezone.utc)
+    expires_at = key.expires_at
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if expires_at < now:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="API Key has expired."
+            )
+
     logger.info(f"API key {key.id} validated successfully")

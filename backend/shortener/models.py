@@ -30,7 +30,7 @@ class ApiKey(SQLModel, table=True):
 
 class ShortenerCreate(BaseModel):
     api_key: str
-    original_url: AnyHttpUrl
+    original_url: str
     short_url: str | None = None
 
 
@@ -44,3 +44,7 @@ class ShortenerRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ApiKeyBody(BaseModel):
+    api_key: str
