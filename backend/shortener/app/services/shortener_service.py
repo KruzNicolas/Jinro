@@ -43,6 +43,8 @@ def create_shortener_link(session: SessionDep, original_url: str, short_url: str
         logger.error(f"Error creating link: ({short_url}): {e}")
         raise
 
+# Endpoint services
+
 
 def create_link(payload: ShortenerCreate, session: SessionDep):
 

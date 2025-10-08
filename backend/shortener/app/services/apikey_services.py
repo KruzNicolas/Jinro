@@ -1,28 +1,53 @@
 
-import uuid
 import hashlib
 
 from fastapi import HTTPException, status
 from db import SessionDep
 from sqlmodel import select
-from datetime import datetime, timezone, timedelta
 from app.logging_config import logger
-from models import ApiKey
+from models import ApiKey, CreateApiKey
 
 
 # Generate Api Key
 
 
-def generate_api_key(session: SessionDep):
-    raw_key = uuid.uuid4().hex + uuid.uuid4().hex
-    hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-    expires = datetime.now(timezone.utc) + timedelta(weeks=1)
+def generate_api_key(payload: CreateApiKey, session: SessionDep):
+    api_key_old = payload.old_api_key
+    api_key_new = payload.api_key
 
-    new_key = ApiKey(key_hash=hashed_key, expires_at=expires)
-    session.add(new_key)
+    def _hash_key(api_key: str) -> str:
+        return hashlib.sha256(api_key.encode()).hexdigest()
+
+    if not api_key_old:
+        existing_key = session.exec(select(ApiKey)).first()
+        if existing_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unauthorized. API key already exists.",
+            )
+
+    else:
+        old_key_hashed = _hash_key(api_key_old)
+        key_record = session.exec(
+            select(ApiKey).where(ApiKey.key_hash == old_key_hashed)
+        ).first()
+        if not key_record:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized access. Invalid old API key.",
+            )
+
+    new_key_hashed = _hash_key(api_key_new)
+    new_key_record = ApiKey(key_hash=new_key_hashed)
+
+    session.add(new_key_record)
     session.commit()
-    logger.info(f"New API Key valid until {expires.isoformat()}: {raw_key}")
-    return raw_key
+    session.refresh(new_key_record)
+
+    logger.info(f"New API Key generated: {api_key_new[:4]}****")
+
+    return api_key_new
+
 
 # Validate Api key
 
@@ -33,18 +58,6 @@ def validate_api_key(session: SessionDep, api_key: str) -> None:
     if not key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API Key.")
-
-    now = datetime.now(timezone.utc)
-    expires_at = key.expires_at
-    if expires_at:
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-
-        if expires_at < now:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="API Key has expired."
-            )
-
-    logger.info(f"API key {key.id} validated successfully")
+            detail="Invalid API Key."
+        )
+    logger.info(f"API key validated (prefix={api_key[:4]}****)")

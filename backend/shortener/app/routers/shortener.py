@@ -6,7 +6,8 @@ from fastapi import APIRouter, status, Request, Body
 # Self imports
 from app.rate_limit_config import limiter
 from app.services.shortener_service import create_link, deactivate_short_url, get_links, get_link
-from models import ShortenerCreate, ShortenerRead, ApiKeyBody
+from app.services.apikey_services import generate_api_key
+from models import ShortenerCreate, ShortenerRead, ApiKeyBody, CreateApiKey
 from db import SessionDep
 
 router = APIRouter()
@@ -39,6 +40,11 @@ def get_all_links(session: SessionDep):
 
 
 @router.get("/{short_url}", tags=["shortener"])
-@limiter.limit("15/minute")
+@limiter.limit("25/minute")
 async def get_short_url(short_url: str, request: Request, session: SessionDep):
     return await get_link(short_url, request, session)
+
+
+@router.post("/links/apikey", tags=["shortener"])
+def new_api_key(payload: CreateApiKey, session: SessionDep):
+    return generate_api_key(payload, session)

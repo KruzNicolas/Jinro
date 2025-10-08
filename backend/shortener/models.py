@@ -23,7 +23,6 @@ class ApiKey(SQLModel, table=True):
     key_hash: str = Field(nullable=False, index=True)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: datetime | None = Field(default=None)
 
 # SCHEMAS (Pydantic)
 
@@ -44,6 +43,11 @@ class ShortenerRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CreateApiKey(BaseModel):
+    old_api_key: str | None = None
+    api_key: str
 
 
 class ApiKeyBody(BaseModel):
