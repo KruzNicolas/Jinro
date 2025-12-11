@@ -10,17 +10,17 @@ Jinro is a high-performance URL shortening service built with Python and FastAPI
 graph TD
     Client[Client]
 
-    subgraph "Application Layer"
-        RL[Rate Limiter (SlowAPI)]
+    subgraph Application["Application Layer"]
+        RL[Rate Limiter - SlowAPI]
         API[FastAPI App]
 
-        subgraph "Services"
+        subgraph Services
             Auth[Auth Service]
             Shortener[Shortener Service]
         end
     end
 
-    subgraph "Persistence Layer"
+    subgraph Persistence["Persistence Layer"]
         DB[(PostgreSQL)]
     end
 
