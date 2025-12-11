@@ -80,6 +80,8 @@ Detailed documentation is available in the `docs/` directory:
 
 - [System Architecture](docs/architecture.md) - Overview of the system design and data flow.
 - [API Reference](docs/api_reference.md) - Detailed guide to API endpoints.
+- [Configuration](docs/configuration.md) - Environment variables setup.
+- [Testing Guide](docs/testing.md) - How to run automated tests.
 - [Troubleshooting](docs/troubleshooting.md) - Solutions for common issues.
 
 ## Usage
